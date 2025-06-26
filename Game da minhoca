@@ -1,0 +1,398 @@
+import pygame
+import random
+import sys
+from enum import Enum
+
+# Inicializar pygame
+pygame.init()
+
+# Configurações da tela
+LARGURA = 800
+ALTURA = 600
+TAMANHO_CELULA = 20
+tela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("🐍 Jogo da Cobrinha")
+
+# Cores
+PRETO = (0, 0, 0)
+BRANCO = (255, 255, 255)
+VERDE = (0, 255, 0)
+VERDE_ESCURO = (0, 150, 0)
+VERMELHO = (255, 0, 0)
+AZUL = (0, 0, 255)
+AMARELO = (255, 255, 0)
+ROXO = (128, 0, 128)
+LARANJA = (255, 165, 0)
+CINZA = (128, 128, 128)
+CINZA_CLARO = (200, 200, 200)
+
+# Direções
+class Direcao(Enum):
+    CIMA = 1
+    BAIXO = 2
+    ESQUERDA = 3
+    DIREITA = 4
+
+class Cobrinha:
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        # Posição inicial no centro da tela
+        centro_x = LARGURA // 2 // TAMANHO_CELULA * TAMANHO_CELULA
+        centro_y = ALTURA // 2 // TAMANHO_CELULA * TAMANHO_CELULA
+        
+        self.corpo = [
+            [centro_x, centro_y],
+            [centro_x - TAMANHO_CELULA, centro_y],
+            [centro_x - 2 * TAMANHO_CELULA, centro_y]
+        ]
+        self.direcao = Direcao.DIREITA
+        self.proxima_direcao = Direcao.DIREITA
+        self.crescer = False
+    
+    def mover(self):
+        # Atualizar direção
+        self.direcao = self.proxima_direcao
+        
+        # Calcular nova posição da cabeça
+        cabeca = self.corpo[0].copy()
+        
+        if self.direcao == Direcao.CIMA:
+            cabeca[1] -= TAMANHO_CELULA
+        elif self.direcao == Direcao.BAIXO:
+            cabeca[1] += TAMANHO_CELULA
+        elif self.direcao == Direcao.ESQUERDA:
+            cabeca[0] -= TAMANHO_CELULA
+        elif self.direcao == Direcao.DIREITA:
+            cabeca[0] += TAMANHO_CELULA
+        
+        # Adicionar nova cabeça
+        self.corpo.insert(0, cabeca)
+        
+        # Remover cauda se não crescer
+        if not self.crescer:
+            self.corpo.pop()
+        else:
+            self.crescer = False
+    
+    def mudar_direcao(self, nova_direcao):
+        # Prevenir movimento reverso
+        if (self.direcao == Direcao.CIMA and nova_direcao != Direcao.BAIXO) or \
+           (self.direcao == Direcao.BAIXO and nova_direcao != Direcao.CIMA) or \
+           (self.direcao == Direcao.ESQUERDA and nova_direcao != Direcao.DIREITA) or \
+           (self.direcao == Direcao.DIREITA and nova_direcao != Direcao.ESQUERDA):
+            self.proxima_direcao = nova_direcao
+    
+    def crescer_cobra(self):
+        self.crescer = True
+    
+    def verificar_colisao(self):
+        cabeca = self.corpo[0]
+        
+        # Colisão com paredes
+        if (cabeca[0] < 0 or cabeca[0] >= LARGURA or 
+            cabeca[1] < 0 or cabeca[1] >= ALTURA):
+            return True
+        
+        # Colisão com próprio corpo
+        if cabeca in self.corpo[1:]:
+            return True
+        
+        return False
+    
+    def desenhar(self, tela):
+        for i, segmento in enumerate(self.corpo):
+            if i == 0:  # Cabeça
+                # Desenhar cabeça com gradiente
+                pygame.draw.rect(tela, VERDE, (segmento[0], segmento[1], TAMANHO_CELULA, TAMANHO_CELULA))
+                pygame.draw.rect(tela, VERDE_ESCURO, (segmento[0], segmento[1], TAMANHO_CELULA, TAMANHO_CELULA), 2)
+                
+                # Olhos
+                olho_tamanho = 4
+                if self.direcao == Direcao.DIREITA:
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 15, segmento[1] + 6), olho_tamanho)
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 15, segmento[1] + 14), olho_tamanho)
+                elif self.direcao == Direcao.ESQUERDA:
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 5, segmento[1] + 6), olho_tamanho)
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 5, segmento[1] + 14), olho_tamanho)
+                elif self.direcao == Direcao.CIMA:
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 6, segmento[1] + 5), olho_tamanho)
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 14, segmento[1] + 5), olho_tamanho)
+                else:  # BAIXO
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 6, segmento[1] + 15), olho_tamanho)
+                    pygame.draw.circle(tela, PRETO, (segmento[0] + 14, segmento[1] + 15), olho_tamanho)
+            else:  # Corpo
+                cor_corpo = (0, 200 - min(i * 5, 100), 0)  # Gradiente do corpo
+                pygame.draw.rect(tela, cor_corpo, (segmento[0], segmento[1], TAMANHO_CELULA, TAMANHO_CELULA))
+                pygame.draw.rect(tela, VERDE_ESCURO, (segmento[0], segmento[1], TAMANHO_CELULA, TAMANHO_CELULA), 1)
+
+class Comida:
+    def __init__(self):
+        self.posicao = [0, 0]
+        self.tipo = 'normal'
+        self.tempo_especial = 0
+        self.gerar_nova_posicao()
+    
+    def gerar_nova_posicao(self):
+        self.posicao[0] = random.randint(0, (LARGURA - TAMANHO_CELULA) // TAMANHO_CELULA) * TAMANHO_CELULA
+        self.posicao[1] = random.randint(0, (ALTURA - TAMANHO_CELULA) // TAMANHO_CELULA) * TAMANHO_CELULA
+        
+        # 10% de chance de comida especial
+        if random.randint(1, 10) == 1:
+            self.tipo = random.choice(['dupla', 'rapida', 'bonus'])
+            self.tempo_especial = pygame.time.get_ticks()
+        else:
+            self.tipo = 'normal'
+    
+    def desenhar(self, tela):
+        if self.tipo == 'normal':
+            pygame.draw.circle(tela, VERMELHO, 
+                             (self.posicao[0] + TAMANHO_CELULA // 2, 
+                              self.posicao[1] + TAMANHO_CELULA // 2), 
+                             TAMANHO_CELULA // 2)
+        elif self.tipo == 'dupla':
+            # Comida que vale 2 pontos (azul)
+            pygame.draw.rect(tela, AZUL, (self.posicao[0], self.posicao[1], TAMANHO_CELULA, TAMANHO_CELULA))
+        elif self.tipo == 'rapida':
+            # Comida que aumenta velocidade temporariamente (amarela)
+            pygame.draw.polygon(tela, AMARELO, [
+                (self.posicao[0] + TAMANHO_CELULA // 2, self.posicao[1]),
+                (self.posicao[0] + TAMANHO_CELULA, self.posicao[1] + TAMANHO_CELULA),
+                (self.posicao[0], self.posicao[1] + TAMANHO_CELULA)
+            ])
+        elif self.tipo == 'bonus':
+            # Comida bônus (roxa) - vale 5 pontos
+            pygame.draw.rect(tela, ROXO, (self.posicao[0], self.posicao[1], TAMANHO_CELULA, TAMANHO_CELULA))
+            pygame.draw.circle(tela, BRANCO, 
+                             (self.posicao[0] + TAMANHO_CELULA // 2, 
+                              self.posicao[1] + TAMANHO_CELULA // 2), 
+                             TAMANHO_CELULA // 4)
+    
+    def expirou(self):
+        if self.tipo != 'normal':
+            return pygame.time.get_ticks() - self.tempo_especial > 5000  # 5 segundos
+        return False
+
+class Jogo:
+    def __init__(self):
+        self.reset()
+        self.fonte = pygame.font.Font(None, 36)
+        self.fonte_pequena = pygame.font.Font(None, 24)
+        self.melhor_pontuacao = 0
+        
+    def reset(self):
+        self.cobrinha = Cobrinha()
+        self.comida = Comida()
+        self.pontuacao = 0
+        self.velocidade = 10
+        self.velocidade_base = 10
+        self.game_over = False
+        self.pausado = False
+        self.efeito_velocidade = 0
+        
+    def verificar_colisao_comida(self):
+        cabeca = self.cobrinha.corpo[0]
+        if cabeca == self.comida.posicao:
+            return True
+        return False
+    
+    def processar_comida(self):
+        if self.comida.tipo == 'normal':
+            self.pontuacao += 1
+            self.cobrinha.crescer_cobra()
+        elif self.comida.tipo == 'dupla':
+            self.pontuacao += 2
+            self.cobrinha.crescer_cobra()
+            self.cobrinha.crescer_cobra()
+        elif self.comida.tipo == 'rapida':
+            self.pontuacao += 1
+            self.cobrinha.crescer_cobra()
+            self.efeito_velocidade = pygame.time.get_ticks()
+            self.velocidade = 15
+        elif self.comida.tipo == 'bonus':
+            self.pontuacao += 5
+            self.cobrinha.crescer_cobra()
+        
+        # Aumentar velocidade gradualmente
+        self.velocidade_base = min(20, 10 + self.pontuacao // 5)
+        if self.efeito_velocidade == 0:
+            self.velocidade = self.velocidade_base
+        
+        self.comida.gerar_nova_posicao()
+        
+        # Evitar que comida apareça na cobra
+        while self.comida.posicao in self.cobrinha.corpo:
+            self.comida.gerar_nova_posicao()
+    
+    def atualizar(self):
+        if self.game_over or self.pausado:
+            return
+        
+        # Verificar efeito de velocidade
+        if self.efeito_velocidade > 0 and pygame.time.get_ticks() - self.efeito_velocidade > 3000:
+            self.velocidade = self.velocidade_base
+            self.efeito_velocidade = 0
+        
+        # Verificar se comida especial expirou
+        if self.comida.expirou():
+            self.comida.gerar_nova_posicao()
+        
+        self.cobrinha.mover()
+        
+        if self.cobrinha.verificar_colisao():
+            self.game_over = True
+            if self.pontuacao > self.melhor_pontuacao:
+                self.melhor_pontuacao = self.pontuacao
+        
+        if self.verificar_colisao_comida():
+            self.processar_comida()
+    
+    def desenhar_grade(self, tela):
+        for x in range(0, LARGURA, TAMANHO_CELULA):
+            pygame.draw.line(tela, CINZA, (x, 0), (x, ALTURA))
+        for y in range(0, ALTURA, TAMANHO_CELULA):
+            pygame.draw.line(tela, CINZA, (0, y), (LARGURA, y))
+    
+    def desenhar_hud(self, tela):
+        # Pontuação
+        texto_pontuacao = self.fonte.render(f"Pontuação: {self.pontuacao}", True, BRANCO)
+        tela.blit(texto_pontuacao, (10, 10))
+        
+        # Melhor pontuação
+        texto_melhor = self.fonte_pequena.render(f"Melhor: {self.melhor_pontuacao}", True, CINZA_CLARO)
+        tela.blit(texto_melhor, (10, 50))
+        
+        # Velocidade
+        texto_velocidade = self.fonte_pequena.render(f"Velocidade: {self.velocidade}", True, BRANCO)
+        tela.blit(texto_velocidade, (10, 75))
+        
+        # Efeito de velocidade
+        if self.efeito_velocidade > 0:
+            tempo_restante = 3 - (pygame.time.get_ticks() - self.efeito_velocidade) // 1000
+            if tempo_restante > 0:
+                texto_efeito = self.fonte_pequena.render(f"VELOCIDADE EXTRA: {tempo_restante}s", True, AMARELO)
+                tela.blit(texto_efeito, (10, 100))
+        
+        # Instruções
+        if not self.game_over and not self.pausado:
+            instrucoes = [
+                "WASD/Setas: Mover",
+                "P: Pausar",
+                "ESC: Sair"
+            ]
+            for i, instrucao in enumerate(instrucoes):
+                texto = self.fonte_pequena.render(instrucao, True, CINZA_CLARO)
+                tela.blit(texto, (LARGURA - 150, 10 + i * 25))
+        
+        # Legenda das comidas especiais
+        if not self.game_over:
+            legenda_y = ALTURA - 120
+            pygame.draw.circle(tela, VERMELHO, (20, legenda_y), 8)
+            texto = self.fonte_pequena.render("Normal (+1)", True, BRANCO)
+            tela.blit(texto, (40, legenda_y - 8))
+            
+            pygame.draw.rect(tela, AZUL, (15, legenda_y + 25, 16, 16))
+            texto = self.fonte_pequena.render("Dupla (+2)", True, BRANCO)
+            tela.blit(texto, (40, legenda_y + 25))
+            
+            pygame.draw.polygon(tela, AMARELO, [(23, legenda_y + 45), (31, legenda_y + 60), (15, legenda_y + 60)])
+            texto = self.fonte_pequena.render("Velocidade", True, BRANCO)
+            tela.blit(texto, (40, legenda_y + 50))
+            
+            pygame.draw.rect(tela, ROXO, (15, legenda_y + 75, 16, 16))
+            pygame.draw.circle(tela, BRANCO, (23, legenda_y + 83), 4)
+            texto = self.fonte_pequena.render("Bônus (+5)", True, BRANCO)
+            tela.blit(texto, (40, legenda_y + 75))
+    
+    def desenhar_game_over(self, tela):
+        # Overlay escuro
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(128)
+        overlay.fill(PRETO)
+        tela.blit(overlay, (0, 0))
+        
+        # Textos de game over
+        texto_game_over = self.fonte.render("GAME OVER", True, VERMELHO)
+        texto_pontuacao = self.fonte.render(f"Pontuação Final: {self.pontuacao}", True, BRANCO)
+        texto_melhor = self.fonte.render(f"Melhor Pontuação: {self.melhor_pontuacao}", True, AMARELO)
+        texto_reiniciar = self.fonte_pequena.render("Pressione SPACE para jogar novamente", True, CINZA_CLARO)
+        texto_sair = self.fonte_pequena.render("Pressione ESC para sair", True, CINZA_CLARO)
+        
+        # Centralizar textos
+        tela.blit(texto_game_over, (LARGURA // 2 - texto_game_over.get_width() // 2, ALTURA // 2 - 80))
+        tela.blit(texto_pontuacao, (LARGURA // 2 - texto_pontuacao.get_width() // 2, ALTURA // 2 - 40))
+        tela.blit(texto_melhor, (LARGURA // 2 - texto_melhor.get_width() // 2, ALTURA // 2))
+        tela.blit(texto_reiniciar, (LARGURA // 2 - texto_reiniciar.get_width() // 2, ALTURA // 2 + 40))
+        tela.blit(texto_sair, (LARGURA // 2 - texto_sair.get_width() // 2, ALTURA // 2 + 65))
+    
+    def desenhar_pausado(self, tela):
+        # Overlay escuro
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(128)
+        overlay.fill(PRETO)
+        tela.blit(overlay, (0, 0))
+        
+        texto_pausado = self.fonte.render("PAUSADO", True, AMARELO)
+        texto_continuar = self.fonte_pequena.render("Pressione P para continuar", True, BRANCO)
+        
+        tela.blit(texto_pausado, (LARGURA // 2 - texto_pausado.get_width() // 2, ALTURA // 2 - 20))
+        tela.blit(texto_continuar, (LARGURA // 2 - texto_continuar.get_width() // 2, ALTURA // 2 + 20))
+    
+    def desenhar(self, tela):
+        tela.fill(PRETO)
+        self.desenhar_grade(tela)
+        
+        self.comida.desenhar(tela)
+        self.cobrinha.desenhar(tela)
+        self.desenhar_hud(tela)
+        
+        if self.game_over:
+            self.desenhar_game_over(tela)
+        elif self.pausado:
+            self.desenhar_pausado(tela)
+
+def main():
+    clock = pygame.time.Clock()
+    jogo = Jogo()
+    
+    while True:
+        # Eventos
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            
+            elif evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                
+                elif evento.key == pygame.K_SPACE and jogo.game_over:
+                    jogo.reset()
+                
+                elif evento.key == pygame.K_p and not jogo.game_over:
+                    jogo.pausado = not jogo.pausado
+                
+                elif not jogo.game_over and not jogo.pausado:
+                    if evento.key in [pygame.K_UP, pygame.K_w]:
+                        jogo.cobrinha.mudar_direcao(Direcao.CIMA)
+                    elif evento.key in [pygame.K_DOWN, pygame.K_s]:
+                        jogo.cobrinha.mudar_direcao(Direcao.BAIXO)
+                    elif evento.key in [pygame.K_LEFT, pygame.K_a]:
+                        jogo.cobrinha.mudar_direcao(Direcao.ESQUERDA)
+                    elif evento.key in [pygame.K_RIGHT, pygame.K_d]:
+                        jogo.cobrinha.mudar_direcao(Direcao.DIREITA)
+        
+        # Atualizar jogo
+        jogo.atualizar()
+        
+        # Desenhar
+        jogo.desenhar(tela)
+        pygame.display.flip()
+        
+        # Controlar FPS
+        clock.tick(jogo.velocidade)
+
+if __name__ == "__main__":
+    main()
